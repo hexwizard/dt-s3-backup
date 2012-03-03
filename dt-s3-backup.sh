@@ -2,6 +2,7 @@
 #
 # Copyright (c) 2008-2010 Damon Timm.
 # Copyright (c) 2010 Mario Santagiuliana.
+# Mar 2012 changes to handle spaces in paths and filenames. James Rendell.
 #
 # This program is free software: you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -171,18 +172,24 @@ get_source_file_size()
 {
   echo "---------[ Source File Size Information ]---------" >> ${LOGFILE}
 
+  # Patches to support spaces in paths-
+  # Remove space as a field separator temporarily
+  OLDIFS=$IFS
+  IFS=$(echo -en "\t\n")
   for exclude in ${EXCLIST[@]}; do
     DUEXCLIST="${DUEXCLIST}${exclude}\n"
   done
 
   for include in ${INCLIST[@]}
     do
-      echo -e $DUEXCLIST | \
+      echo -e '"'$DUEXCLIST'"' | \
       du -hs --exclude-from="-" ${include} | \
-      awk '{ print $2"\t"$1 }' \
+      awk '{ FS="\t"; $0=$0; print $1"\t"$2 }' \
       >> ${LOGFILE}
   done
   echo >> ${LOGFILE}
+  # Restore IFS
+  IFS=$OLDIFS
 }
 
 get_remote_file_size()
@@ -203,23 +210,30 @@ get_remote_file_size()
 
 include_exclude()
 {
+  # Changes to handle spaces in directory names and filenames
+  # and wrapping the files to include and exclude in quotes.
+  OLDIFS=$IFS
+  IFS=$(echo -en "\t\n")
   for include in ${INCLIST[@]}
     do
-      TMP=" --include="$include
+      TMP=" --include=""'"$include"'"
       INCLUDE=$INCLUDE$TMP
   done
   for exclude in ${EXCLIST[@]}
       do
-      TMP=" --exclude "$exclude
+      TMP=" --exclude=""'"$exclude"'"
       EXCLUDE=$EXCLUDE$TMP
     done
     EXCLUDEROOT="--exclude=**"
+  IFS=$OLDIFS
 }
 
 duplicity_cleanup()
 {
   echo "-----------[ Duplicity Cleanup ]-----------" >> ${LOGFILE}
-  ${ECHO} ${DUPLICITY} ${CLEAN_UP_TYPE} ${CLEAN_UP_VARIABLE} ${STATIC_OPTIONS} --force \
+  # The inclusion of quotes wrapping filenames means the eval funcion
+  # is required
+  eval ${ECHO} ${DUPLICITY} ${CLEAN_UP_TYPE} ${CLEAN_UP_VARIABLE} ${STATIC_OPTIONS} --force \
         --encrypt-key=${GPG_KEY} \
         --sign-key=${GPG_KEY} \
         ${DEST} >> ${LOGFILE}
@@ -228,7 +242,9 @@ duplicity_cleanup()
 
 duplicity_backup()
 {
-  ${ECHO} ${DUPLICITY} ${OPTION} ${VERBOSITY} ${STATIC_OPTIONS} \
+  # The inclusion of quotes wrapping filenames means the eval
+  # function is required.
+  eval ${ECHO} ${DUPLICITY} ${OPTION} ${VERBOSITY} ${STATIC_OPTIONS} \
   --encrypt-key=${GPG_KEY} \
   --sign-key=${GPG_KEY} \
   ${EXCLUDE} \
@@ -364,14 +380,14 @@ elif [ "$1" = "--restore-file" ]; then
   if [[ ! "$2" ]]; then
     echo "Which file do you want to restore (eg, mail/letter.txt):"
     read -e FILE_TO_RESTORE
-    FILE_TO_RESTORE=$FILE_TO_RESTORE
+    FILE_TO_RESTORE="'"$FILE_TO_RESTORE"'"
     echo
   else
-    FILE_TO_RESTORE=$2
+    FILE_TO_RESTORE="'"$2"'"
   fi
 
   if [[ "$3" ]]; then
-        DEST=$3
+        DEST="'"$3"'"
     else
     DEST=$(basename $FILE_TO_RESTORE)
     fi
